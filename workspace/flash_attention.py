@@ -1,3 +1,13 @@
+"""Barebones Flash Attention implementation for learning.
+
+Based off the paper `https://arxiv.org/pdf/2205.14135v2.pdf`, algorithms 2 and
+3 specifically (TODO: Algorithm 1 fwd complete for 2d inputs, need to fuse
+dropout, softmax scaling and softmax causal mask for algos 2 and 3).
+
+Do not use for production or experiments! See the triton docs implementation:
+`https://triton-lang.org/main/getting-started/tutorials/06-fused-attention.html`
+but prefer an offical version from torch or flash attention repo.
+"""
 import os
 
 import torch
