@@ -20,7 +20,7 @@ def _print_tensor(prefix, var):
 DEBUG = 1
 if DEBUG == 1 and os.environ["TRITON_DEBUG"] == 0:
     raise Exception("Please set TRITON_DEBUG=1 to debug.")
-DEBUG_TENSOR_SHAPE_1 = (32, 256)
+DEBUG_TENSOR_SHAPE_1 = (64, 1024)
 DEBUG_TENSOR_SHAPE_2 = (1024, 64)
 DEBUG_TENSOR_SHAPE_3 = (1024, 1024)
 DEBUG_TENSOR_DTYPE_1 = torch.float32
@@ -45,6 +45,7 @@ def flash_attn_fwd_kernel(
     N: tl.constexpr, d: tl.constexpr,     # Dimension constants.
     BR_BLOCK_SIZE: tl.constexpr, BC_BLOCK_SIZE: tl.constexpr,   # Block sizes.
     TR_NUM_BLOCKS: tl.constexpr, TC_NUM_BLOCKS: tl.constexpr,   # Number of blocks.
+    debug_tensor_ptr,
 ):
     pid = tl.program_id(axis=0)
 
@@ -87,6 +88,11 @@ def flash_attn_fwd_kernel(
         # qk.T dot product.
         Sij = tl.dot(qi, kj_T)
 
+        # Debugging.
+        k_tile = k_offs_n[:, None] * d + k_offs_d[None, :]
+        kj = tl.load(K_ptr + k_tile)
+        tl.store(debug_tensor_ptr + k_tile, kj)
+
         # Calculate current tile statistics.
         mij_tilde = tl.max(Sij, axis=1)
         Pij_tilde = tl.exp(Sij - mij_tilde[:, None])
@@ -128,6 +134,12 @@ def flash_attn_fwd_kernel(
     tl.store(l_ptr + lm_tile, li)
     tl.store(m_ptr + lm_tile, mi)
 
+#
+#@triton.jit
+#def flash_attn_bwd_kernel(
+#):
+#    pass
+#
 
 def flash_attn_fwd(
     Q, K, V,
@@ -176,6 +188,7 @@ def flash_attn_fwd(
         N, d,
         BR_BLOCK_SIZE=BR_BLOCK_SIZE, BC_BLOCK_SIZE=BC_BLOCK_SIZE,
         TR_NUM_BLOCKS=TR_NUM_BLOCKS, TC_NUM_BLOCKS=TC_NUM_BLOCKS,
+        debug_tensor_ptr=debug_tensor_1,
         num_warps=num_warps,
     )
     m_true = torch.max(Q@K.T, dim=-1).values
@@ -195,6 +208,7 @@ def test_flash_attn_fwd(N, d):
     print(ret)
     print(ref)
     assert torch.allclose(ret, ref, atol=2e-2, rtol=0)
+    breakpoint()
     return ret, debug_tensor_1, debug_tensor_2, debug_tensor_3
 
 
